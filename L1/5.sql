@@ -30,7 +30,6 @@ BEGIN
         END IF;
     END;
 
-    -- Вставка записи
     INSERT INTO MyTable (id, val) VALUES (p_id, p_val);
     COMMIT; 
 
