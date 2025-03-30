@@ -1,4 +1,14 @@
+SET SERVEROUTPUT ON SIZE UNLIMITED;
+SET LINESIZE 200;
+SET PAGESIZE 1000;
+
 -- Выдаем необходимые привилегии системе для выполнения процедур и доступа к таблицам
+BEGIN
+    
+    DBMS_OUTPUT.PUT_LINE('-------------------------НАСТРОЙКА ПРИВИЛЕГИЙ СИСТЕМЫ -------------------------');
+END;
+/
+
 GRANT EXECUTE ANY PROCEDURE TO SYSTEM;  
 GRANT EXECUTE ANY PROCEDURE ON SCHEMA C##DEV_SCHEMA TO SYSTEM;  
 GRANT EXECUTE ANY PROCEDURE ON SCHEMA C##PROD_SCHEMA TO SYSTEM; 
@@ -6,10 +16,17 @@ GRANT SELECT ANY TABLE TO SYSTEM;  -- Разрешаем выборку данн
 GRANT SELECT ANY TABLE ON SCHEMA C##DEV_SCHEMA TO SYSTEM; 
 GRANT SELECT ANY TABLE ON SCHEMA C##PROD_SCHEMA TO SYSTEM;  
 GRANT SELECT ANY DICTIONARY TO SYSTEM;  
-GRANT SELECT_CATALOG_ROLE TO SYSTEM;  --  для доступа к каталогам
+GRANT SELECT_CATALOG_ROLE TO SYSTEM;  -- для доступа к каталогам
 GRANT EXECUTE_CATALOG_ROLE TO SYSTEM;  -- для выполнения операций над каталогами
 
 -- Создаем таблицу для хранения результатов сравнения
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('--------------------------------------------------------------------------------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('------------------------------------ СОЗДАНИЕ ВСПОМОГАТЕЛЬНЫХ ТАБЛИЦ------------------------------------');
+    
+END;
+/
+
 CREATE TABLE comparison_result (
     table_name VARCHAR2(100),  -- Имя таблицы
     is_different NUMBER(1) DEFAULT 0,  -- Флаг, указывающий на различия (1 - есть различия, 0 - нет)
@@ -26,6 +43,11 @@ CREATE TABLE sorted_tables (
 CREATE OR REPLACE PROCEDURE sort_tables_in_schema(schema_name IN VARCHAR2) 
 AS
 BEGIN
+    DBMS_OUTPUT.PUT_LINE('-----------------------------------------------------------------------------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('----------------------------------- СОРТИРОВКА ТАБЛИЦ ПО ВНЕШНИМ КЛЮЧАМ------------------------------------------------');
+   
+    DBMS_OUTPUT.PUT_LINE('Схема: ' || schema_name);
+    
     -- Цикл по всем таблицам, начиная с тех, у которых нет зависимостей
     FOR rec IN (
         WITH DEPENDENCYTREE(table_name, lvl) AS (
@@ -54,8 +76,11 @@ BEGIN
         BEGIN
             -- Вставляем имя таблицы в таблицу sorted_tables
             INSERT INTO sorted_tables (table_name) VALUES (rec.table_name);
+            DBMS_OUTPUT.PUT_LINE('Добавлена таблица: ' || rec.table_name);
         END;
     END LOOP;
+    
+    DBMS_OUTPUT.PUT_LINE('===========Сортировка таблиц завершена============');
 END sort_tables_in_schema;
 /
 
@@ -70,6 +95,12 @@ CREATE OR REPLACE PROCEDURE check_cyclic_dependencies(schema_name IN VARCHAR2)
 AS
     result VARCHAR2(100);  -- Переменная для хранения результата
 BEGIN
+    
+    DBMS_OUTPUT.PUT_LINE('-----------------------------------------------------------------------------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('------------------------------ ПРОВЕРКА ЦИКЛИЧЕСКИХ ЗАВИСИМОСТЕЙ В СХЕМЕ------------------------------------------------');
+ 
+    DBMS_OUTPUT.PUT_LINE('Схема: ' || schema_name);
+
     -- Цикл по всем таблицам в схеме
     FOR schema_table IN (SELECT schema_tables.table_name name FROM all_tables schema_tables WHERE owner = schema_name) 
     LOOP
@@ -102,11 +133,11 @@ BEGIN
     FROM dual;
 
     -- Выводим результат на экран
-    DBMS_OUTPUT.PUT_LINE(result);
+    DBMS_OUTPUT.PUT_LINE('Результат: ' || result);
     
     -- Очищаем таблицу зависимостей
     EXECUTE IMMEDIATE 'DELETE FROM schema_dependencies';
-  
+    DBMS_OUTPUT.PUT_LINE('========== Проверка завершена===========================');
 END check_cyclic_dependencies;
 /
 
@@ -117,6 +148,15 @@ AS
     query_string VARCHAR2(4000) := '';  -- Строка для хранения DDL-запросов
     temp_string VARCHAR2(4000) := '';  -- Временная строка для хранения результатов
 BEGIN     
+    
+    DBMS_OUTPUT.PUT_LINE('-----------------------------------------------------------------------------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('------------------------------ НАЧАЛО СРАВНЕНИЯ СХЕМ ------------------------');
+    -- DBMS_OUTPUT.PUT_LINE('-----------------------------------------------------------------------------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('================ DEV схема: ' || dev_schema || '               ============');
+    DBMS_OUTPUT.PUT_LINE('================ PROD схема: ' || prod_schema || '             ============');
+  
+    DBMS_OUTPUT.PUT_LINE('');
+
     -- Цикл по всем таблицам, которые есть в обеих схемах
     FOR same_table IN 
         (SELECT table_name FROM all_tables dev_tables WHERE OWNER = dev_schema
@@ -136,8 +176,10 @@ BEGIN
         -- Если есть различия, добавляем запись в результат
         IF diff > 0 THEN
             INSERT INTO comparison_result (table_name, is_different) VALUES (same_table.table_name, 1);
+            DBMS_OUTPUT.PUT_LINE('Обнаружены различия в таблице: ' || same_table.table_name || ' (' || diff || ' различий)');
         ELSE
             INSERT INTO comparison_result (table_name) VALUES (same_table.table_name);
+            DBMS_OUTPUT.PUT_LINE('Таблица ' || same_table.table_name || ' идентична в обеих схемах');
         END IF;
     END LOOP;
 
@@ -148,6 +190,7 @@ BEGIN
         SELECT prod_tables.table_name FROM all_tables prod_tables WHERE prod_tables.OWNER = prod_schema) 
     LOOP
         INSERT INTO comparison_result (table_name, is_only_in_dev_schema) VALUES (other_table.name, 1);
+        DBMS_OUTPUT.PUT_LINE('Таблица существует только в DEV: ' || other_table.name);
     END LOOP;
 
     -- Цикл по таблицам, которые есть только в производственной схеме
@@ -157,10 +200,14 @@ BEGIN
         SELECT dev_tables.table_name FROM all_tables dev_tables WHERE dev_tables.OWNER = dev_schema) 
     LOOP
         INSERT INTO comparison_result (table_name, is_only_in_prod_schema) VALUES (other_table.name, 1);
+        DBMS_OUTPUT.PUT_LINE('Таблица существует только в PROD: ' || other_table.name);
     END LOOP;
     
     -- Выводим информацию о таблицах схемы разработки
-    DBMS_OUTPUT.PUT_LINE('Таблицы схемы ' || dev_schema || ':');
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('-----------------------------------------------------------------------------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('-------------------------------АНАЛИЗ СХЕМЫ ' || dev_schema || '----------------------------------------------------------');
+    
     check_cyclic_dependencies(dev_schema);  -- Проверяем на циклические зависимости
     sort_tables_in_schema(dev_schema);  -- Сортируем таблицы по внешнему ключу
 
@@ -172,13 +219,13 @@ BEGIN
         ON sorted_tables.table_name = comparison_result.table_name
     ) LOOP
         IF rec.is_different = 1 THEN
-            DBMS_OUTPUT.PUT_LINE('Таблица ' || rec.table_name || ' имеет различия');
+            DBMS_OUTPUT.PUT_LINE(' Таблица ' || rec.table_name || ' имеет различия между схемами');
         ELSIF rec.is_only_in_dev_schema = 1 THEN
-            DBMS_OUTPUT.PUT_LINE('Таблица ' || rec.table_name || ' находится только в ' || dev_schema);
+            DBMS_OUTPUT.PUT_LINE(' Таблица ' || rec.table_name || ' существует только в ' || dev_schema);
             SELECT create_object('TABLE', rec.table_name, prod_schema, dev_schema) INTO temp_string;
             query_string := query_string || CHR(10) || temp_string;  -- Добавляем запрос на создание таблицы в строку
         ELSE
-            DBMS_OUTPUT.PUT_LINE('Таблица ' || rec.table_name || ' одинаковая');
+            DBMS_OUTPUT.PUT_LINE(' Таблица ' || rec.table_name || ' идентична в обеих схемах');
         END IF;            
     END LOOP; 
 
@@ -186,7 +233,10 @@ BEGIN
     EXECUTE IMMEDIATE 'DELETE FROM sorted_tables';
     
     -- Выводим информацию о таблицах схемы производства
-    DBMS_OUTPUT.PUT_LINE(CHR(10) || 'Таблицы схемы ' || prod_schema || ':');
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('-----------------------------------------------------------------------------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('--------------------------------------АНАЛИЗ СХЕМЫ ' || prod_schema || ' ----------------------------------------------');
+   
     check_cyclic_dependencies(prod_schema);  -- Проверяем на циклические зависимости
     sort_tables_in_schema(prod_schema);  -- Сортируем таблицы по внешнему ключу
 
@@ -198,15 +248,15 @@ BEGIN
         ON sorted_tables.table_name = comparison_result.table_name
     ) LOOP
         IF rec.is_different = 1 THEN
-            DBMS_OUTPUT.PUT_LINE('Tаблица ' || rec.table_name || ' имеет различия');
+            DBMS_OUTPUT.PUT_LINE(' Таблица ' || rec.table_name || ' имеет различия между схемами');
             SELECT update_object('TABLE', rec.table_name, prod_schema, dev_schema) INTO temp_string;
             query_string := query_string || CHR(10) || temp_string;  -- Добавляем запрос на обновление таблицы в строку
         ELSIF rec.is_only_in_prod_schema = 1 THEN
-            DBMS_OUTPUT.PUT_LINE('Таблица ' || rec.table_name || ' находится только в ' || prod_schema);
+            DBMS_OUTPUT.PUT_LINE(' Таблица ' || rec.table_name || ' существует только в ' || prod_schema);
             SELECT delete_object('TABLE', rec.table_name, prod_schema) INTO temp_string;
             query_string := query_string || CHR(10) || temp_string;  -- Добавляем запрос на удаление таблицы в строку
         ELSE
-            DBMS_OUTPUT.PUT_LINE('Таблица ' || rec.table_name || ' одинаковая');
+            DBMS_OUTPUT.PUT_LINE(' Таблица ' || rec.table_name || ' идентична в обеих схемах');
         END IF;            
     END LOOP; 
 
@@ -216,7 +266,10 @@ BEGIN
 
     -- Если нужно, выводим DDL скрипты
     IF ddl_output = 1 THEN
-        DBMS_OUTPUT.PUT_LINE(CHR(10) || 'DDL скрипт:' || CHR(10));
+        DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('-----------------------------------------------------------------------------------------------------------------------');
+        DBMS_OUTPUT.PUT_LINE('------------------------------------------------- DDL СКРИПТЫ ДЛЯ СИНХРОНИЗАЦИИ -----------------------------------');
+   
         DBMS_OUTPUT.PUT_LINE(query_string);
     END IF;
 
@@ -227,13 +280,22 @@ BEGIN
 
     -- Если нужно, выводим DDL скрипты для объектов
     IF ddl_output = 1 THEN
-        DBMS_OUTPUT.PUT_LINE(CHR(10) || 'DDL скрипт:' || CHR(10));
+        DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('-----------------------------------------------------------------------------------------------------------------------');
+        DBMS_OUTPUT.PUT_LINE('-------------------------------------DL СКРИПТЫ ДЛЯ ОБЪЕКТОВ СХЕМЫ -----------------------------------------------');
+   
         DBMS_OUTPUT.PUT_LINE(query_string);
     END IF;
+    
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('-----------------------------------------------------------------------------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('---------------------------------------------СРАВНЕНИЕ СХЕМ УСПЕШНО ЗАВЕРШЕНО-----------------------------------------');
+   
 END compare_schemas;
 /
 
--------------------------------------------------------------------------------З2 Процедура для сравнения объектов схем
+-------------------------------------------------------------------------------
+-- Процедура для сравнения объектов схем
 CREATE OR REPLACE PROCEDURE compare_schemas_objects(
     dev_schema IN VARCHAR2,  -- Имя схемы 
     prod_schema IN VARCHAR2,  -- Имя  схемы
@@ -251,10 +313,14 @@ BEGIN
     objects_arr := OBJARRAY('PROCEDURE', 'FUNCTION', 'INDEX', 'PACKAGE');
     total := objects_arr.count;  -- Получаем количество объектов
 
-    DBMS_OUTPUT.PUT_LINE(CHR(10) || 'Сравнение объектов:');
-    
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('-----------------------------------------------------------------------------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('---------------------------------------------СРАВНЕНИЕ ОБЪЕКТОВ СХЕМ-----------------------------------------------------');
+   
     -- Цикл по всем типам объектов
     FOR i IN 1 .. total LOOP
+        DBMS_OUTPUT.PUT_LINE('Тип объекта: ' || objects_arr(i));
+        
         -- Смотрим общие объекты между схемами
         FOR same_object IN 
             (SELECT dev_objects.object_name 
@@ -278,11 +344,11 @@ BEGIN
             
             -- Сравниваем тексты объектов
             IF dev_text != prod_text THEN
-                DBMS_OUTPUT.PUT_LINE(objects_arr(i) || ' ' || same_object.object_name || ' имеют различную структуру');
+                DBMS_OUTPUT.PUT_LINE('➤ ' || objects_arr(i) || ' ' || same_object.object_name || ' имеют различную структуру');
                 SELECT update_object(objects_arr(i), same_object.object_name, prod_schema, dev_schema) INTO temp_string;
                 query_string := query_string || CHR(10) || temp_string;  -- Добавляем запрос на обновление в строку
             ELSE
-                DBMS_OUTPUT.PUT_LINE(objects_arr(i) || ' ' || same_object.object_name || ' одинаковые');
+                DBMS_OUTPUT.PUT_LINE('✓ ' || objects_arr(i) || ' ' || same_object.object_name || ' идентичны');
             END IF;
         END LOOP;
 
@@ -296,7 +362,7 @@ BEGIN
             FROM all_objects prod_objects 
             WHERE owner = prod_schema AND object_type = objects_arr(i)) 
         LOOP
-            DBMS_OUTPUT.PUT_LINE(objects_arr(i) || ' ' || other_object.object_name || ' находится только в ' || dev_schema);
+            DBMS_OUTPUT.PUT_LINE('➤ ' || objects_arr(i) || ' ' || other_object.object_name || ' существует только в ' || dev_schema);
             SELECT create_object(objects_arr(i), other_object.object_name, prod_schema, dev_schema) INTO temp_string;
             query_string := query_string || CHR(10) || temp_string;  -- Добавляем запрос на создание в строку
         END LOOP;
@@ -311,11 +377,13 @@ BEGIN
             FROM all_objects dev_objects 
             WHERE owner = dev_schema AND object_type = objects_arr(i)) 
         LOOP
-            DBMS_OUTPUT.PUT_LINE(objects_arr(i) || ' ' || other_object.object_name || ' находится только в ' || prod_schema);
+            DBMS_OUTPUT.PUT_LINE('➤ ' || objects_arr(i) || ' ' || other_object.object_name || ' существует только в ' || prod_schema);
             SELECT delete_object(objects_arr(i), other_object.object_name, prod_schema) INTO temp_string;
             query_string := query_string || CHR(10) || temp_string;  -- Добавляем запрос на удаление в строку
         END LOOP;
     END LOOP;
+    
+    DBMS_OUTPUT.PUT_LINE('==========Сравнение объектов завершено===========================');
 END compare_schemas_objects;
 /
 
@@ -375,8 +443,17 @@ BEGIN
 END delete_object;
 /
 
--- Запуск процедуры сравнения схем
+-- Запуск процедуры сравнения схем с красивым выводом
 BEGIN
+    DBMS_OUTPUT.PUT_LINE('==========================================================================================');
+    DBMS_OUTPUT.PUT_LINE('============= ЗАПУСК СРАВНЕНИЯ СХЕМ =============');
+   
+    DBMS_OUTPUT.PUT_LINE('');
+    
     compare_schemas('C##DEV_SCHEMA', 'C##PROD_SCHEMA', 1);
+    
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('-----------------------------------------------------------------------------------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('============= ПРОЦЕДУРА ЗАВЕРШЕНА УСПЕШНО=============');
 END;
 /
