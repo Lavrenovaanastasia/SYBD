@@ -1,3 +1,16 @@
+
+SELECT object_name, status 
+FROM user_objects 
+WHERE object_name = 'COMPARE_SCHEMAS';
+
+SHOW ERRORS PROCEDURE COMPARE_SCHEMAS;
+
+
+SHOW ERRORS FUNCTION CREATE_OBJECT;
+
+SHOW ERRORS FUNCTION UPDATE_OBJECT;
+
+SHOW ERRORS PROCEDURE COMPARE_SCHEMAS_OBJECTS;
 -----------drop
 DROP TABLE STUDENTS;
 DROP TABLE GROUPS;-- удалить 
@@ -89,44 +102,47 @@ END;
 
 SELECT table_name FROM user_tables; --Все таблицы
 ---------------------------------СОЗДАНИЕ ПОЛЬЗОВАТЕЛЯ--------------------------------------
+-- Проверка привилегий пользователя an
+SELECT * FROM USER_SYS_PRIVS WHERE GRANTEE = 'TEST';
+
 SELECT * FROM USER_SYS_PRIVS WHERE PRIVILEGE = 'CREATE TRIGGER';
 
 ALTER SESSION SET "_ORACLE_SCRIPT" = true;
-CREATE USER test IDENTIFIED BY 111;
-GRANT CREATE SESSION TO test;
-grant create table to test;
-grant create procedure to test;
-grant create trigger to test;
-grant create view to test;
-grant create sequence to test;
-grant alter any table to test;
-grant alter any procedure to test;
-grant alter any trigger to test;
-grant alter profile to test;
-grant delete any table to test;
-grant drop any table to test;
-grant drop any procedure to test;
-grant drop any trigger to test;
-grant drop any view to test;
-grant drop profile to test;
-GRANT INSERT ANY TABLE TO test;
-GRANT CREATE TRIGGER TO test;
-grant alter any table to test;
-grant alter any procedure to test;
-grant alter any trigger to test;
-grant alter profile to test;
-grant delete any table to test;
-grant drop any table to test;
-grant drop any procedure to test;
-grant drop any trigger to test;
-grant drop any view to test;
-grant drop profile to test;
+CREATE USER an IDENTIFIED BY 111;
+GRANT CREATE SESSION TO an;
+grant create table to an;
+grant create procedure to an;
+grant create trigger to an;
+grant create view to an;
+grant create sequence to an;
+grant alter any table to an;
+grant alter any procedure to an;
+grant alter any trigger to an;
+grant alter profile to an;
+grant delete any table to an;
+grant drop any table to an;
+grant drop any procedure to an;
+grant drop any trigger to an;
+grant drop any view to an;
+grant drop profile to an;
+GRANT INSERT ANY TABLE TO an;
+GRANT CREATE TRIGGER TO an;
+grant alter any table to an;
+grant alter any procedure to an;
+grant alter any trigger to an;
+grant alter profile to an;
+grant delete any table to an;
+grant drop any table to an;
+grant drop any procedure to an;
+grant drop any trigger to an;
+grant drop any view to an;
+grant drop profile to an;
 
 
-grant select on sys.v_$session to test;
-grant select on sys.v_$sesstat to test;
-grant select on sys.v_$statname to test;
-grant SELECT ANY DICTIONARY to test;
+grant select on sys.v_$session to an;
+grant select on sys.v_$sesstat to an;
+grant select on sys.v_$statname to an;
+grant SELECT ANY DICTIONARY to an;
 -------------------------------------------------------------------------
 ALTER USER TEST QUOTA UNLIMITED ON USERS;
 
