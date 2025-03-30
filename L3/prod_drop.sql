@@ -1,4 +1,6 @@
 -- Удаление объектов схемы C##prod_schema
+DROP USER c##prod_schema CASCADE;
+-- Удаление объектов схемы C##prod_schema
 
 BEGIN
     -- Удаляем ограничения внешних ключей
