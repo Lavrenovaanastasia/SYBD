@@ -48,33 +48,41 @@ BEGIN
    
     DBMS_OUTPUT.PUT_LINE('Схема: ' || schema_name);
     
-    -- Цикл по всем таблицам, начиная с тех, у которых нет зависимостей
+    -- Цикл по всем таблицам в правильном порядке
     FOR rec IN (
-        WITH DEPENDENCYTREE(table_name, lvl) AS (
-            -- Начинаем с таблиц без внешних ключей
-            SELECT table_name, 1 AS lvl
-            FROM all_tables
-            WHERE owner = schema_name
-            AND NOT EXISTS (
-                SELECT 1
-                FROM all_constraints
-                WHERE constraint_type = 'R'
-                AND r_constraint_name = constraint_name
-            )
+        WITH DependencyTree (table_name, lvl) AS (
+            -- Начальные таблицы: те, у которых нет внешних ключей
+            SELECT t.table_name, 1 AS lvl
+            FROM all_tables t
+            WHERE t.owner = schema_name
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM all_constraints c
+                  WHERE c.owner = t.owner
+                    AND c.table_name = t.table_name
+                    AND c.constraint_type = 'R'
+              )
             UNION ALL
-            -- Рекурсивно добавляем таблицы с внешними ключами
-            SELECT a.table_name, b.lvl + 1
+            -- Рекурсивно добавляем таблицы, зависящие от уже добавленных
+            SELECT a.table_name, dt.lvl + 1
             FROM all_constraints a
-            JOIN DEPENDENCYTREE b ON a.r_constraint_name = b.table_name
+            JOIN all_constraints parent 
+              ON a.r_constraint_name = parent.constraint_name 
+              AND a.owner = parent.owner
+            JOIN DependencyTree dt 
+              ON dt.table_name = parent.table_name
             WHERE a.owner = schema_name
-            AND a.constraint_type = 'R'
+              AND a.constraint_type = 'R'
         )
         SELECT table_name
-        FROM DEPENDENCYTREE
-        ORDER BY lvl  -- Сортируем по уровню вложенности
+        FROM (
+            SELECT table_name, MIN(lvl) as min_lvl
+            FROM DependencyTree
+            GROUP BY table_name
+        )
+        ORDER BY min_lvl
     ) LOOP
         BEGIN
-            -- Вставляем имя таблицы в таблицу sorted_tables
             INSERT INTO sorted_tables (table_name) VALUES (rec.table_name);
             DBMS_OUTPUT.PUT_LINE('Добавлена таблица: ' || rec.table_name);
         END;
@@ -132,14 +140,24 @@ BEGIN
     INTO result
     FROM dual;
 
-    -- Выводим результат на экран
+    
     DBMS_OUTPUT.PUT_LINE('Результат: ' || result);
+    
+    FOR cyclic_tables IN (
+        SELECT DISTINCT child_obj, parent_obj 
+        FROM schema_dependencies
+        WHERE parent_obj IN (SELECT child_obj FROM schema_dependencies)
+          AND child_obj IN (SELECT parent_obj FROM schema_dependencies)
+    ) LOOP
+        DBMS_OUTPUT.PUT_LINE('Циклическая зависимость между: ' || cyclic_tables.child_obj || ' и ' || cyclic_tables.parent_obj);
+    END LOOP;
     
     -- Очищаем таблицу зависимостей
     EXECUTE IMMEDIATE 'DELETE FROM schema_dependencies';
     DBMS_OUTPUT.PUT_LINE('========== Проверка завершена===========================');
 END check_cyclic_dependencies;
 /
+
 
 -- Процедура для сравнения схем
 CREATE OR REPLACE PROCEDURE compare_schemas(dev_schema IN VARCHAR2, prod_schema IN VARCHAR2, ddl_output IN NUMBER) 
@@ -344,11 +362,11 @@ BEGIN
             
             -- Сравниваем тексты объектов
             IF dev_text != prod_text THEN
-                DBMS_OUTPUT.PUT_LINE('➤ ' || objects_arr(i) || ' ' || same_object.object_name || ' имеют различную структуру');
+                DBMS_OUTPUT.PUT_LINE(' ' || objects_arr(i) || ' ' || same_object.object_name || ' имеют различную структуру');
                 SELECT update_object(objects_arr(i), same_object.object_name, prod_schema, dev_schema) INTO temp_string;
                 query_string := query_string || CHR(10) || temp_string;  -- Добавляем запрос на обновление в строку
             ELSE
-                DBMS_OUTPUT.PUT_LINE('✓ ' || objects_arr(i) || ' ' || same_object.object_name || ' идентичны');
+                DBMS_OUTPUT.PUT_LINE('' || objects_arr(i) || ' ' || same_object.object_name || ' идентичны');
             END IF;
         END LOOP;
 
@@ -362,7 +380,7 @@ BEGIN
             FROM all_objects prod_objects 
             WHERE owner = prod_schema AND object_type = objects_arr(i)) 
         LOOP
-            DBMS_OUTPUT.PUT_LINE('➤ ' || objects_arr(i) || ' ' || other_object.object_name || ' существует только в ' || dev_schema);
+            DBMS_OUTPUT.PUT_LINE(' ' || objects_arr(i) || ' ' || other_object.object_name || ' существует только в ' || dev_schema);
             SELECT create_object(objects_arr(i), other_object.object_name, prod_schema, dev_schema) INTO temp_string;
             query_string := query_string || CHR(10) || temp_string;  -- Добавляем запрос на создание в строку
         END LOOP;
@@ -377,7 +395,7 @@ BEGIN
             FROM all_objects dev_objects 
             WHERE owner = dev_schema AND object_type = objects_arr(i)) 
         LOOP
-            DBMS_OUTPUT.PUT_LINE('➤ ' || objects_arr(i) || ' ' || other_object.object_name || ' существует только в ' || prod_schema);
+            DBMS_OUTPUT.PUT_LINE(' ' || objects_arr(i) || ' ' || other_object.object_name || ' существует только в ' || prod_schema);
             SELECT delete_object(objects_arr(i), other_object.object_name, prod_schema) INTO temp_string;
             query_string := query_string || CHR(10) || temp_string;  -- Добавляем запрос на удаление в строку
         END LOOP;
@@ -447,13 +465,6 @@ END delete_object;
 BEGIN
     DBMS_OUTPUT.PUT_LINE('==========================================================================================');
     DBMS_OUTPUT.PUT_LINE('============= ЗАПУСК СРАВНЕНИЯ СХЕМ =============');
-   
-    DBMS_OUTPUT.PUT_LINE('');
-    
-    compare_schemas('C##DEV_SCHEMA', 'C##PROD_SCHEMA', 1);
-    
-    DBMS_OUTPUT.PUT_LINE('');
-    DBMS_OUTPUT.PUT_LINE('-----------------------------------------------------------------------------------------------------------------------');
-    DBMS_OUTPUT.PUT_LINE('============= ПРОЦЕДУРА ЗАВЕРШЕНА УСПЕШНО=============');
+    compare_schemas('C##DEV_SCHEMA', 'C##PROD_SCHEMA', 1);   
 END;
 /
